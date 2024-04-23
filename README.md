@@ -7,11 +7,7 @@ The application in this repository wraps the OpenBB Platform API in a way tha it
 
 ## Installation and running
 
-Install this repository using pip (or clone and install with poetry):
-
-```bash
-pip install https://github.com/OpenBB-finance/openbb-platform-pro-backend
-```
+Clone this repository and install it using pip (`pip install -e .`) or poetry (`poetry install`).
 
 The package provides a shortcut to launch the application using:
 
