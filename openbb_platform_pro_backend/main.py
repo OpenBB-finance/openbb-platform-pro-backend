@@ -15,7 +15,6 @@ from .utils import (
 openapi = app.openapi()
 widgets_json = {}
 
-# Your existing loop to iterate through routes
 routes = [
     p for p in openapi["paths"] if p.startswith("/api") and "get" in openapi["paths"][p]
 ]
@@ -36,7 +35,6 @@ for route in routes:
     #     response_schema_refs = data_schema["properties"]["results"]
     #     columns_defs = data_schema_to_columns_defs(openapi, response_schema_refs)
 
-    # Construct the widget configuration
     widget_config = {
         "name": f'OBB {route_api["get"]["operationId"].replace("_", " ").title()}',
         "description": route_api["get"]["description"],
@@ -61,7 +59,7 @@ for route in routes:
     # if columns_defs:
     #     widget_config["data"]["table"]["columnsDefs"] = columns_defs
 
-    # Add the widget configuration to the widgets_json
+    # Add the widget configuration to the widgets.json
     widgets_json[widget_config["widgetId"]] = widget_config
 
     if has_chart:
