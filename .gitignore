@@ -1,3 +1,9 @@
+**/widgets.json
+**/*.ipynb
+
+.vscode
+
+# Generic Python .girignore
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

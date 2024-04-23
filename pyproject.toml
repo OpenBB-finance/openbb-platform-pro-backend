@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "openbb-platform-pro-backend"
+version = "1.0.0"
+description = "Widgets JSON for OpenBB Terminal Pro"
+authors = ["OpenBB Team <hello@openbb.co>"]
+readme = "README.md"
+packages = [{ include = "openbb_platform_pro_backend" }]
+
+scripts = { "openbb-platform-pro-backend" = "openbb_platform_pro_backend.main:launch_api" }
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.12"
+openbb = "^4.1.7"
+openbb-charting = "^2.0.3"
+
+[tool.poetry.group.dev.dependencies]
+openbb-devtools = "^1.1.6"
+poetry = "^1.8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
