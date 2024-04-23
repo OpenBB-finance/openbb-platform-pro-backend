@@ -29,7 +29,6 @@ def get_query_schema_for_widget(
                 continue
             # Special handling for "chart" parameter
             if param_name == "chart":
-                print(f"chart available for {command_route}")
                 _has_chart = True
                 continue
 
