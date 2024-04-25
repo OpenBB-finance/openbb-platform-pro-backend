@@ -38,8 +38,7 @@ for route in routes:
     widget_config = {
         "name": f'OBB {route_api["get"]["operationId"].replace("_", " ").title()}',
         "description": route_api["get"]["description"],
-        "category": route_api["get"]["tags"][0],
-        "searchCategory": route_api["get"]["tags"][0],
+        "category": route_api["get"]["tags"][0].title(),
         "widgetType": route_api["get"]["tags"][0],
         "widgetId": f"OBB {widget_id}",
         "params": query_schema,  # Use the fetched query schema
