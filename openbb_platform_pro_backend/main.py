@@ -6,9 +6,9 @@ from fastapi.responses import JSONResponse
 from openbb_core.api.rest_api import app
 
 from .utils import (
-    # get_data_schema_for_widget,
+    get_data_schema_for_widget,
     get_query_schema_for_widget,
-    # data_schema_to_columns_defs,
+    data_schema_to_columns_defs,
 )
 
 
@@ -22,18 +22,18 @@ for route in routes:
     route_api = openapi["paths"][route]
     widget_id = route_api["get"]["operationId"]
 
+    # Prepare the query schema of the widget
     query_schema, has_chart = get_query_schema_for_widget(openapi, route)
 
-    # TODO: Uncomment the code below when adding columns_defs will not trigger
-    #       widget crashing when no input parameters were passed
-    # data_schema = get_data_schema_for_widget(openapi, widget_id)
-    # if (
-    #     data_schema
-    #     and "properties" in data_schema
-    #     and "results" in data_schema["properties"]
-    # ):
-    #     response_schema_refs = data_schema["properties"]["results"]
-    #     columns_defs = data_schema_to_columns_defs(openapi, response_schema_refs)
+    # Prepare the data schema of the widget
+    data_schema = get_data_schema_for_widget(openapi, widget_id)
+    if (
+        data_schema
+        and "properties" in data_schema
+        and "results" in data_schema["properties"]
+    ):
+        response_schema_refs = data_schema["properties"]["results"]
+        columns_defs = data_schema_to_columns_defs(openapi, response_schema_refs)
 
     widget_config = {
         "name": f'OBB {route_api["get"]["operationId"].replace("_", " ").title()}',
@@ -54,10 +54,8 @@ for route in routes:
         },
     }
 
-    # TODO: Uncomment the code below when adding columns_defs will not trigger
-    #       widget crashing when no input parameters were passed
-    # if columns_defs:
-    #     widget_config["data"]["table"]["columnsDefs"] = columns_defs
+    if columns_defs:
+        widget_config["data"]["table"]["columnsDefs"] = columns_defs
 
     # Add the widget configuration to the widgets.json
     widgets_json[widget_config["widgetId"]] = widget_config
@@ -78,7 +76,6 @@ for route in routes:
         }
 
         widgets_json[widget_config_chart["widgetId"]] = widget_config_chart
-
 
 # Write the widgets_json to a file for debugging purposes
 with open("widgets.json", "w", encoding="utf-8") as f:

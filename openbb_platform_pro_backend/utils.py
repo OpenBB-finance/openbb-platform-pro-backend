@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 def get_query_schema_for_widget(
     openapi_json: dict, command_route: str
 ) -> tuple[dict, bool]:
-    """
-    Extracts the query schema for a widget based on its operationId,
-    with special handling for certain parameters (chart, sort, limit, order).
+    """Extract the query schema for a widget.
+
+    Does that based on operationId, with special handling for certain parameters like
+    chart, sort, limit, order...
 
     Args:
         openapi_json (dict): The OpenAPI specification as a dictionary.
@@ -17,19 +18,27 @@ def get_query_schema_for_widget(
     Returns:
         dict: A dictionary containing the query schema for the widget, excluding specified parameters.
     """
-    _query_schema = {"optional": {}}
-    _has_chart = False
+    _query_schema: dict = {"optional": {}}
+    _has_chart: bool = False
 
     command_schema = openapi_json["paths"][command_route]["get"]
     for param in command_schema.get("parameters", []):
         if param["in"] == "query":
             param_name = param["name"]
-            # Skip "sort" and "limit" parameters
+            # Skip "sort", "limit", "order" parameters. This is handled by the widget
             if param_name in ["sort", "limit", "order"]:
                 continue
-            # Special handling for "chart" parameter
+            # Identify if there is a "chart" available
             if param_name == "chart":
                 _has_chart = True
+                continue
+            # Handle single provider
+            if (
+                param_name == "provider"
+                and "enum" in param["schema"]
+                and len(param["schema"]["enum"]) == 1
+            ):
+                _query_schema["provider"] = param["schema"]["enum"][0]
                 continue
 
             # Direct enum in schema
@@ -69,6 +78,7 @@ def get_query_schema_for_widget(
                 _query_schema["optional"]["start_date"] = (
                     datetime.now() - timedelta(days=90)
                 ).strftime("%Y-%m-%d")
+
     return _query_schema, _has_chart
 
 
@@ -107,16 +117,19 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
     # Check if 'anyOf' is in the result_schema_ref and handle the nested structure
     if "anyOf" in result_schema_ref:
         for item in result_schema_ref["anyOf"]:
-            # Check if 'items' and 'oneOf' are in the item
+            # When there are multiple providers a 'oneOf' is used
             if "items" in item and "oneOf" in item["items"]:
                 # Extract the $ref values
                 schema_refs.extend(
                     [
-                        oneOfItem["$ref"].split("/")[-1]
-                        for oneOfItem in item["items"]["oneOf"]
-                        if "$ref" in oneOfItem
+                        oneOf_item["$ref"].split("/")[-1]
+                        for oneOf_item in item["items"]["oneOf"]
+                        if "$ref" in oneOf_item
                     ]
                 )
+            # When there's only one model there is no oneOf
+            elif "items" in item and "$ref" in item["items"]:
+                schema_refs.append(item["items"]["$ref"].split("/")[-1])
 
     # Fetch the schemas using the extracted references
     schemas = [
@@ -127,7 +140,7 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
 
     # Proceed with finding common keys and generating column definitions
     if not schemas:
-        return []  # Return an empty list if no schemas were found
+        return []
 
     # If there's only one schema, use its properties directly
     if len(schemas) == 1:
