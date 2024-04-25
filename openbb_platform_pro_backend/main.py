@@ -84,7 +84,7 @@ with open("widgets.json", "w", encoding="utf-8") as f:
 @app.get("/")
 async def get_root():
     """API Root."""
-    return JSONResponse(content=widgets_json)
+    return JSONResponse(content={})
 
 
 @app.get("/widgets.json")
