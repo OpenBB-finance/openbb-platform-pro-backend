@@ -15,4 +15,6 @@ The package provides a shortcut to launch the application using:
 openbb-platform-pro-backend
 ```
 
-:Note: If this command is not available, you may need to deactivate and activate back your virtual environment.
+:note: If this command is not available, you may need to deactivate and activate back your virtual environment.
+
+:note: Set up your provider API keys in the `~/.openbb_platform/user_settings.json` file.
