@@ -153,13 +153,31 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
 
     column_defs = []
     for key in common_keys:
+        cell_data_type = None
         prop = schemas[0]["properties"][key]
-        prop_type = prop.get("type", "string")
-        cell_data_type = "text"
-        if prop_type == "number" or prop_type == "integer":
-            cell_data_type = "number"
-        elif "format" in prop and prop["format"] in ["date", "date-time"]:
-            cell_data_type = "date"
+        # Handle prop types for both when there's a single prop type or multiple
+        if "anyOf" in prop:
+            types = [
+                sub_prop.get("type") for sub_prop in prop["anyOf"] if "type" in sub_prop
+            ]
+            if "number" in types or "integer" in types or "float" in types:
+                cell_data_type = "number"
+            elif "string" in types and any(
+                sub_prop.get("format") in ["date", "date-time"]
+                for sub_prop in prop["anyOf"]
+                if "format" in sub_prop
+            ):
+                cell_data_type = "date"
+            else:
+                cell_data_type = "text"
+        else:
+            prop_type = prop.get("type", None)
+            if prop_type in ["number", "integer", "float"]:
+                cell_data_type = "number"
+            elif "format" in prop and prop["format"] in ["date", "date-time"]:
+                cell_data_type = "date"
+            else:
+                cell_data_type = "text"
 
         column_def = {}
         column_def["field"] = key
@@ -167,7 +185,7 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
         column_def["cellDataType"] = cell_data_type
 
         column_def["chartDataType"] = (
-            "series" if cell_data_type == "number" else "category"
+            "series" if cell_data_type in ["number", "integer", "float"] else "category"
         )
         if cell_data_type == "date":
             column_def["formatterFn"] = "date"

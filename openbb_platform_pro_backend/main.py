@@ -48,13 +48,16 @@ for route in routes:
             "dataKey": "results",
             "table": {
                 "showAll": True,
-                "index": "date",
             },
         },
     }
 
     if columns_defs:
         widget_config["data"]["table"]["columnsDefs"] = columns_defs
+        if "date" in columns_defs:
+            widget_config["data"]["table"]["index"] = "date"
+        if "period" in columns_defs:
+            widget_config["data"]["table"]["index"] = "period"
 
     # Add the widget configuration to the widgets.json
     widgets_json[widget_config["widgetId"]] = widget_config
