@@ -1,4 +1,4 @@
-"""Generate and serve the widgets.json from the OpenBB Platform API."""
+"""Generate and serve the widgets.json for the OpenBB Platform API."""
 
 import json
 
@@ -96,11 +96,16 @@ async def get_widgets():
     return JSONResponse(content=widgets_json)
 
 
+# pylint: disable=import-outside-toplevel
 def launch_api():
     """Main function."""
-    import uvicorn  # pylint: disable=import-outside-toplevel
+    import os
+    import uvicorn
 
-    uvicorn.run("openbb_platform_pro_backend.main:app", reload=True)
+    host = os.getenv("OPENBB_API_HOST", "127.0.0.1")
+    port = os.getenv("OPENBB_API_PORT", 8000)
+
+    uvicorn.run("openbb_platform_pro_backend.main:app", host=host, port=port)
 
 
 if __name__ == "__main__":
