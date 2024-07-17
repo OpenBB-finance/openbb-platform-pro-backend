@@ -103,7 +103,18 @@ def launch_api():
     import uvicorn
 
     host = os.getenv("OPENBB_API_HOST", "127.0.0.1")
+    if not host:
+        raise ValueError(
+            "OPENBB_API_HOST is set incorrectly. It should be an IP address or hostname."
+        )
+
     port = os.getenv("OPENBB_API_PORT", 8000)
+    try:
+        port = int(port)
+    except ValueError:
+        raise ValueError(
+            "OPENBB_API_PORT is set incorrectly. It should be an port number."
+        )
 
     uvicorn.run("openbb_platform_pro_backend.main:app", host=host, port=port)
 
