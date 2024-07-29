@@ -17,14 +17,14 @@ CURRENT_USER_SETTINGS = os.environ.get("HOME") + "/.openbb_platform/user_setting
 USER_SETTINGS_COPY = CURRENT_USER_SETTINGS.replace("user_settings.json", "user_settings_copy.json")
 
 
-def check_port(port) -> int:
+def check_port(host, port) -> int:
     """Check if the port number is free."""
     not_free = True
     port = int(port) - 1
     while not_free:
         port = port + 1
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            res = sock.connect_ex(("localhost", port))
+            res = sock.connect_ex((host, port))
             if res != 0:
                 not_free = False
     return port
@@ -225,7 +225,7 @@ def launch_api():
             print("\n\nInvalid port number. Defaulting to 8000.")
             port = 8000
 
-    free_port = check_port(port)
+    free_port = check_port(host, port)
 
     if free_port != port:
         print(f"\n\nPort {port} is already in use. Using port {free_port}.\n")
