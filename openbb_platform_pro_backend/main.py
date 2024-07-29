@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi.responses import JSONResponse
 from openbb_core.api.rest_api import app
 
-
 from .utils import (
     get_data_schema_for_widget,
     get_query_schema_for_widget,
