@@ -178,7 +178,6 @@ def launch_api():
             for k, v in hub_credentials.items():
                 if v:
                     new_settings["preferences"][k] = v
-            new_settings["preferences"].update(hub_preferences)
 
         if hub_defaults:
             for k, v in hub_defaults.items():
