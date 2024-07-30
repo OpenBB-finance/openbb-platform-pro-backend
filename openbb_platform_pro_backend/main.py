@@ -190,7 +190,6 @@ def launch_api():
                     new_settings["defaults"][k] = v
                 else:
                     continue
-            new_settings["defaults"].update(hub_defaults)
 
         # Write the new settings to the user_settings.json file
         with open(CURRENT_USER_SETTINGS, "w") as f:
