@@ -226,6 +226,7 @@ def launch_api():
             print("\n\nInvalid port number. Defaulting to 8000.")
             port = 8000
     if port < 1025:
+        port = 8000
         print("\n\nInvalid port number, must be above 1024. Defaulting to 8000.")
 
     free_port = check_port(host, port)
