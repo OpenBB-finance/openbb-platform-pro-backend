@@ -13,9 +13,8 @@ from .utils import (
     data_schema_to_columns_defs,
 )
 
-CURRENT_USER_SETTINGS = os.environ.get("HOME") + "/.openbb_platform/user_settings.json"
-USER_SETTINGS_COPY = CURRENT_USER_SETTINGS.replace("user_settings.json", "user_settings_copy.json")
-
+CURRENT_USER_SETTINGS = os.path.join(os.environ.get("HOME"), ".openbb_platform", "user_settings.json")
+USER_SETTINGS_COPY = os.path.join(os.environ.get("HOME"), ".openbb_platform", "user_settings_backup.json")
 
 def check_port(host, port) -> int:
     """Check if the port number is free."""
@@ -117,6 +116,7 @@ async def get_widgets():
 # pylint: disable=import-outside-toplevel
 def launch_api():
     """Main function."""
+    import getpass
     import uvicorn
 
     if Path(CURRENT_USER_SETTINGS).exists():
@@ -125,10 +125,10 @@ def launch_api():
     else:
         current_settings = {"credentials": {}, "preferences": {}, "defaults": {"commands": {}}}
 
-    pat = input(
+    pat = getpass.getpass(
         "\n\nEnter your personal access token (PAT) to authorize the API and update your local settings."
         + "\nSkip to use a pre-configured 'user_settings.json' file."
-        + "\nPress Enter to skip or copy your PAT to the command line: "
+        + "\nPress Enter to skip or copy (entered values are not displayed on screen) your PAT to the command line: "
     )
 
     if pat:
@@ -142,29 +142,30 @@ def launch_api():
             hub_preferences = json.loads(hub_settings.preferences.model_dump_json())
             hub_defaults = json.loads(hub_settings.defaults.model_dump_json())
         except Exception as e:
-            print(f"\n\nError connecting with Hub:\n{e}")
+            print(f"\n\nError connecting with Hub:\n{e}\n\nUsing the local settings.\n")
             hub_credentials = {}
             hub_preferences = {}
             hub_defaults = {}
 
-        # Prompt the user to ask if they want to persist the new settings
-        persist_input = input(
-            "\n\nDo you want to persist the new settings?"
-            + " Not recommended for public machines. (yes/no): "
-        ).strip().lower()
+        if hub_credentials:
+            # Prompt the user to ask if they want to persist the new settings
+            persist_input = input(
+                "\n\nDo you want to persist the new settings?"
+                + " Not recommended for public machines. (yes/no): "
+            ).strip().lower()
 
-        if persist_input in ["yes", "y"]:
-            PERSIST = True
-        elif persist_input in ["no", "n"]:
-            PERSIST = False
-        else:
-            print("\n\nInvalid input. Defaulting to not persisting the new settings.")
-            PERSIST = False
+            if persist_input in ["yes", "y"]:
+                PERSIST = True
+            elif persist_input in ["no", "n"]:
+                PERSIST = False
+            else:
+                print("\n\nInvalid input. Defaulting to not persisting the new settings.")
+                PERSIST = False
 
-        # Save the current settings to restore at the end of the session.
-        if PERSIST is False:
-            with open(USER_SETTINGS_COPY, "w") as f:
-                json.dump(current_settings, f, indent=4)
+            # Save the current settings to restore at the end of the session.
+            if PERSIST is False:
+                with open(USER_SETTINGS_COPY, "w") as f:
+                    json.dump(current_settings, f, indent=4)
 
         new_settings = current_settings.copy()
 
@@ -224,6 +225,8 @@ def launch_api():
         except ValueError:
             print("\n\nInvalid port number. Defaulting to 8000.")
             port = 8000
+    if port < 1025:
+        print("\n\nInvalid port number, must be above 1024. Defaulting to 8000.")
 
     free_port = check_port(host, port)
 
