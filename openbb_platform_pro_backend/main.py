@@ -197,10 +197,6 @@ def launch_api():
 
         current_settings = new_settings
 
-    if current_settings["credentials"].get("OPENAI_API_KEY"):
-        print("\n\nOpenAI API Key found, adding to the environment variables.\n")
-        os.environ["OPENAI_API_KEY"] = current_settings["credentials"]["OPENAI_API_KEY"]
-
     host = os.getenv("OPENBB_API_HOST", "127.0.0.1")
     if not host:
         print(
