@@ -1,7 +1,9 @@
 """Generate and serve the widgets.json for the OpenBB Platform API."""
 
 import json
-
+import os
+import socket
+from pathlib import Path
 from fastapi.responses import JSONResponse
 from openbb_core.api.rest_api import app
 
@@ -10,6 +12,21 @@ from .utils import (
     get_query_schema_for_widget,
     data_schema_to_columns_defs,
 )
+
+CURRENT_USER_SETTINGS = os.path.join(os.environ.get("HOME"), ".openbb_platform", "user_settings.json")
+USER_SETTINGS_COPY = os.path.join(os.environ.get("HOME"), ".openbb_platform", "user_settings_backup.json")
+
+def check_port(host, port) -> int:
+    """Check if the port number is free."""
+    not_free = True
+    port = int(port) - 1
+    while not_free:
+        port = port + 1
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            res = sock.connect_ex((host, port))
+            if res != 0:
+                not_free = False
+    return port
 
 
 openapi = app.openapi()
@@ -99,25 +116,130 @@ async def get_widgets():
 # pylint: disable=import-outside-toplevel
 def launch_api():
     """Main function."""
-    import os
+    import getpass
     import uvicorn
+
+    if Path(CURRENT_USER_SETTINGS).exists():
+        with open(CURRENT_USER_SETTINGS, "r") as f:
+            current_settings = json.load(f)
+    else:
+        current_settings = {"credentials": {}, "preferences": {}, "defaults": {"commands": {}}}
+
+    pat = getpass.getpass(
+        "\n\nEnter your personal access token (PAT) to authorize the API and update your local settings."
+        + "\nSkip to use a pre-configured 'user_settings.json' file."
+        + "\nPress Enter to skip or copy (entered values are not displayed on screen) your PAT to the command line: "
+    )
+
+    if pat:
+        from openbb_core.app.service.hub_service import HubService
+
+        try:
+            Hub = HubService()
+            _ = Hub.connect(pat=pat)
+            hub_settings = Hub.pull()
+            hub_credentials = json.loads(hub_settings.credentials.model_dump_json())
+            hub_preferences = json.loads(hub_settings.preferences.model_dump_json())
+            hub_defaults = json.loads(hub_settings.defaults.model_dump_json())
+        except Exception as e:
+            print(f"\n\nError connecting with Hub:\n{e}\n\nUsing the local settings.\n")
+            hub_credentials = {}
+            hub_preferences = {}
+            hub_defaults = {}
+
+        if hub_credentials:
+            # Prompt the user to ask if they want to persist the new settings
+            persist_input = input(
+                "\n\nDo you want to persist the new settings?"
+                + " Not recommended for public machines. (yes/no): "
+            ).strip().lower()
+
+            if persist_input in ["yes", "y"]:
+                PERSIST = True
+            elif persist_input in ["no", "n"]:
+                PERSIST = False
+            else:
+                print("\n\nInvalid input. Defaulting to not persisting the new settings.")
+                PERSIST = False
+
+            # Save the current settings to restore at the end of the session.
+            if PERSIST is False:
+                with open(USER_SETTINGS_COPY, "w") as f:
+                    json.dump(current_settings, f, indent=4)
+
+        new_settings = current_settings.copy()
+
+        # Update the current settings with the new settings
+        if hub_credentials:
+            for k, v in hub_credentials.items():
+                if v:
+                    new_settings["credentials"][k] = v
+
+        if hub_preferences:
+            for k, v in hub_credentials.items():
+                if v:
+                    new_settings["preferences"][k] = v
+
+        if hub_defaults:
+            for k, v in hub_defaults.items():
+                if k == "commands":
+                    for key, value in hub_defaults["commands"].items():
+                        if value:
+                            new_settings["defaults"]["commands"][key] = value
+                elif v:
+                    new_settings["defaults"][k] = v
+                else:
+                    continue
+
+        # Write the new settings to the user_settings.json file
+        with open(CURRENT_USER_SETTINGS, "w") as f:
+            json.dump(new_settings, f, indent=4)
+
+        current_settings = new_settings
 
     host = os.getenv("OPENBB_API_HOST", "127.0.0.1")
     if not host:
-        raise ValueError(
-            "OPENBB_API_HOST is set incorrectly. It should be an IP address or hostname."
+        print(
+            "\n\nOPENBB_API_HOST is set incorrectly. It should be an IP address or hostname."
         )
+        host = input("Enter the host IP address or hostname: ")
+        if not host:
+            host = "127.0.0.1"
 
     port = os.getenv("OPENBB_API_PORT", 8000)
+
     try:
         port = int(port)
     except ValueError:
-        raise ValueError(
-            "OPENBB_API_PORT is set incorrectly. It should be an port number."
+        print(
+            "\n\nOPENBB_API_PORT is set incorrectly. It should be an port number."
         )
+        port = input("Enter the port number: ")
+        try:
+            port = int(port)
+        except ValueError:
+            print("\n\nInvalid port number. Defaulting to 8000.")
+            port = 8000
+    if port < 1025:
+        port = 8000
+        print("\n\nInvalid port number, must be above 1024. Defaulting to 8000.")
 
-    uvicorn.run("openbb_platform_pro_backend.main:app", host=host, port=port)
+    free_port = check_port(host, port)
 
+    if free_port != port:
+        print(f"\n\nPort {port} is already in use. Using port {free_port}.\n")
+        port = free_port
+
+    try:
+        uvicorn.run("openbb_platform_pro_backend.main:app", host=host, port=port)
+    finally:
+        # If user_settings_copy.json exists, then restore the original settings.
+        if os.path.exists(USER_SETTINGS_COPY):
+            print("\n\nRestoring the original settings.\n")
+            os.replace(USER_SETTINGS_COPY, CURRENT_USER_SETTINGS)
 
 if __name__ == "__main__":
-    launch_api()
+    try:
+        launch_api()
+    except KeyboardInterrupt:
+        print("Restoring the original settings.")
