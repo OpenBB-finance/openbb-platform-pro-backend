@@ -172,7 +172,10 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
                 cell_data_type = "text"
         else:
             prop_type = prop.get("type", None)
-            if prop_type in ["number", "integer", "float"]:
+            measurement = prop.get("x-unit_measurement")
+            if measurement == "percent":
+                cell_data_type = "normalizedPercent" if prop.get("x-frontend_multiply") == 100 else "percent"
+            elif prop_type in ["number", "integer", "float"]:
                 cell_data_type = "number"
             elif "format" in prop and prop["format"] in ["date", "date-time"]:
                 cell_data_type = "date"
@@ -182,6 +185,7 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
         column_def = {}
         column_def["field"] = key
         column_def["headerName"] = prop.get("title", key.title())
+        column_def["description"] = prop.get("description", prop.get("title", key.title()))
         column_def["cellDataType"] = cell_data_type
 
         column_def["chartDataType"] = (
@@ -190,7 +194,9 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
         if cell_data_type == "date":
             column_def["formatterFn"] = "date"
         elif cell_data_type == "number":
-            column_def["formatterFn"] = "int"
+            column_def["formatterFn"] = "none"
+        elif cell_data_type == "normalizedPercent":
+            column_def["formatterFn"] = "percent"
 
         column_defs.append(column_def)
 
