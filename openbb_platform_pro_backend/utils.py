@@ -32,7 +32,7 @@ def get_query_schema_for_widget(
         command_route (str): The route of the widget.
 
     Returns:
-        tuple[List[ParamDef], bool]: A list of ParamDef objects containing the query schema for the widget,
+        tuple[list[dict], bool]: A list of ParamDef dictionaries containing the query schema for the widget,
         and a boolean indicating if a chart is available.
     """
     param_defs: list[dict] = []
