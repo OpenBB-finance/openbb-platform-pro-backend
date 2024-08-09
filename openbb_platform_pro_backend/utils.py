@@ -1,85 +1,147 @@
 """Utils for openbb_widgets_api."""
 
-from datetime import datetime, timedelta
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+ParamType = Literal["date", "text", "ticker", "number", "boolean"]
+
+
+class ParamOption(BaseModel):
+    label: str
+    value: Any
+
+
+class ParamDef(BaseModel):
+    type: ParamType = "text"
+    paramName: str
+    description: str | None = ""
+    value: Any | None = ""
+    label: str | None = None
+    show: bool = True
+    options: list[ParamOption] | None = Field(default_factory=list)
 
 
 def get_query_schema_for_widget(
     openapi_json: dict, command_route: str
-) -> tuple[dict, bool]:
+) -> tuple[list[dict], bool]:
     """Extract the query schema for a widget.
-
-    Does that based on operationId, with special handling for certain parameters like
-    chart, sort, limit, order...
 
     Args:
         openapi_json (dict): The OpenAPI specification as a dictionary.
-        route (str): The route of the widget.
+        command_route (str): The route of the widget.
 
     Returns:
-        dict: A dictionary containing the query schema for the widget, excluding specified parameters.
+        tuple[List[ParamDef], bool]: A list of ParamDef objects containing the query schema for the widget,
+        and a boolean indicating if a chart is available.
     """
-    _query_schema: dict = {"optional": {}}
-    _has_chart: bool = False
+    param_defs: list[dict] = []
+    has_chart: bool = False
 
     command_schema = openapi_json["paths"][command_route]["get"]
     for param in command_schema.get("parameters", []):
+        param_def: ParamDef | None = None
         if param["in"] == "query":
             param_name = param["name"]
+
             # Skip "sort", "limit", "order" parameters. This is handled by the widget
             if param_name in ["sort", "limit", "order"]:
                 continue
+
             # Identify if there is a "chart" available
             if param_name == "chart":
-                _has_chart = True
+                has_chart = True
                 continue
+
+            param_def = ParamDef(
+                paramName=param_name,
+                label=param_name.replace("_", " ").title(),
+                show=True,
+            )
+
             # Handle single provider
             if (
                 param_name == "provider"
                 and "enum" in param["schema"]
                 and len(param["schema"]["enum"]) == 1
             ):
-                _query_schema["provider"] = param["schema"]["enum"][0]
+                param_def.value = param["schema"]["enum"][0]
+                param_def.show = False
+                param_defs.append(param_def.model_dump())
                 continue
 
             # Direct enum in schema
+
             if "enum" in param["schema"]:
-                _query_schema["optional"][param_name] = param["schema"]["enum"]
+                param_def.options = [
+                    ParamOption(label=str(v), value=v)
+                    for v in param["schema"]["enum"]
+                    if v is not None
+                ]
+                if None in param["schema"]["enum"]:
+                    param_def.options.append(ParamOption(label="None", value=""))
+
             # Enum within anyOf
             elif "anyOf" in param["schema"]:
-                enums = []
+                enums, types = [], []
                 for sub_schema in param["schema"]["anyOf"]:
                     if "enum" in sub_schema:
                         enums.extend(sub_schema["enum"])
+                        continue
+
+                    if sub_schema.get("format") in ["date", "date-time"]:
+                        param_def.type = "date"
+                        param_def.value = "$currentDate"
+                        if param_name == "start_date":
+                            # Set the default start date 3 months in the past
+                            param_def.value = "$currentDate-3M"
+                        continue
+
+                    if "type" in sub_schema:
+                        types.append(sub_schema["type"])
+
                 if enums:  # If any enums were found, remove duplicates
-                    _query_schema["optional"][param_name] = list(set(enums))
-                else:  # Handle other types within anyOf
-                    types = [
-                        sub_schema.get("type")
-                        for sub_schema in param["schema"]["anyOf"]
-                        if "type" in sub_schema
+                    param_def.options = [
+                        ParamOption(label=str(v), value=v)
+                        for v in set(enums)
+                        if v is not None
                     ]
-                    # Default handling for common types
+                    if None in enums:
+                        param_def.options.append(ParamOption(label="None", value=""))
+                elif not param_def.type:  # Handle other types within anyOf
                     if "string" in types:
-                        _query_schema["optional"][param_name] = "string"
+                        param_def.value = ""
                     elif "integer" in types:
-                        _query_schema["optional"][param_name] = 0
+                        param_def.type = "number"
+                        param_def.value = param["schema"].get("default", 0)
                     elif "null" in types:
-                        _query_schema["optional"][param_name] = None
+                        param_def.value = None
 
             # Handling other types not within anyOf
             elif param["schema"].get("type") == "string":
-                _query_schema["optional"][param_name] = "string"
+                param_def.value = param["schema"].get("default", "")
             elif param["schema"].get("type") == "integer":
-                _query_schema["optional"][param_name] = 0
+                param_def.type = "number"
+                param_def.value = param["schema"].get("default", 0)
+            elif param["schema"].get("type") == "boolean":
+                param_def.type = "boolean"
+                param_def.value = param["schema"].get("default", False)
 
-            # Handle default dates
-            if param_name == "start_date":
-                # Set the default start date 3 months in the past
-                _query_schema["optional"]["start_date"] = (
-                    datetime.now() - timedelta(days=90)
-                ).strftime("%Y-%m-%d")
+        if param.get("description"):
+            param_def.description = param.get("description")
+        if param_name == "provider":
+            if param.get("required", True) and "enum" in param["schema"]:
+                providers = param["schema"]["enum"]
+                if providers:
+                    param_def.value = providers[0]
+                param_def.show = False if len(providers) == 1 else True
+                param_defs.append(param_def.model_dump())
+            continue
 
-    return _query_schema, _has_chart
+        if param_def:
+            param_defs.append(param_def.model_dump())
+
+    return param_defs, has_chart
 
 
 def get_data_schema_for_widget(openapi_json, operation_id):
@@ -182,7 +244,9 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
         column_def = {}
         column_def["field"] = key
         column_def["headerName"] = prop.get("title", key.title())
-        column_def["description"] = prop.get("description", prop.get("title", key.title()))
+        column_def["description"] = prop.get(
+            "description", prop.get("title", key.title())
+        )
         column_def["cellDataType"] = cell_data_type
 
         column_def["chartDataType"] = (
@@ -191,7 +255,11 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
 
         measurement = prop.get("x-unit_measurement")
         if measurement == "percent":
-            column_def["formatterFn"] = "normalizedPercent" if prop.get("x-frontend_multiply") == 100 else "percent"
+            column_def["formatterFn"] = (
+                "normalizedPercent"
+                if prop.get("x-frontend_multiply") == 100
+                else "percent"
+            )
         elif cell_data_type == "date":
             column_def["formatterFn"] = "date"
         elif cell_data_type == "number":

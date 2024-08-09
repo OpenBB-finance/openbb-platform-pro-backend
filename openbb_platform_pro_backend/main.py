@@ -4,17 +4,25 @@ import json
 import os
 import socket
 from pathlib import Path
+
 from fastapi.responses import JSONResponse
 from openbb_core.api.rest_api import app
 
 from .utils import (
+    data_schema_to_columns_defs,
     get_data_schema_for_widget,
     get_query_schema_for_widget,
-    data_schema_to_columns_defs,
 )
 
-CURRENT_USER_SETTINGS = os.path.join(os.environ.get("HOME"), ".openbb_platform", "user_settings.json")
-USER_SETTINGS_COPY = os.path.join(os.environ.get("HOME"), ".openbb_platform", "user_settings_backup.json")
+CURRENT_USER_SETTINGS = os.path.join(
+    os.environ.get("HOME"), ".openbb_platform", "user_settings.json"
+)
+USER_SETTINGS_COPY = os.path.join(
+    os.environ.get("HOME"), ".openbb_platform", "user_settings_backup.json"
+)
+
+WIDGETS_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "widgets.json")
+
 
 def check_port(host, port) -> int:
     """Check if the port number is free."""
@@ -29,76 +37,83 @@ def check_port(host, port) -> int:
     return port
 
 
-openapi = app.openapi()
-widgets_json = {}
+def create_widgets_json():
+    """Create the widgets.json file."""
+    openapi = app.openapi()
+    widgets_json = {}
 
-routes = [
-    p for p in openapi["paths"] if p.startswith("/api") and "get" in openapi["paths"][p]
-]
-for route in routes:
-    route_api = openapi["paths"][route]
-    widget_id = route_api["get"]["operationId"]
+    routes = [
+        p
+        for p in openapi["paths"]
+        if p.startswith("/api") and "get" in openapi["paths"][p]
+    ]
+    for route in routes:
+        route_api = openapi["paths"][route]
+        widget_id = route_api["get"]["operationId"]
 
-    # Prepare the query schema of the widget
-    query_schema, has_chart = get_query_schema_for_widget(openapi, route)
+        # Prepare the query schema of the widget
+        query_schema, has_chart = get_query_schema_for_widget(openapi, route)
 
-    # Prepare the data schema of the widget
-    data_schema = get_data_schema_for_widget(openapi, widget_id)
-    if (
-        data_schema
-        and "properties" in data_schema
-        and "results" in data_schema["properties"]
-    ):
-        response_schema_refs = data_schema["properties"]["results"]
-        columns_defs = data_schema_to_columns_defs(openapi, response_schema_refs)
+        # Prepare the data schema of the widget
+        data_schema = get_data_schema_for_widget(openapi, widget_id)
+        if (
+            data_schema
+            and "properties" in data_schema
+            and "results" in data_schema["properties"]
+        ):
+            response_schema_refs = data_schema["properties"]["results"]
+            columns_defs = data_schema_to_columns_defs(openapi, response_schema_refs)
 
-    widget_config = {
-        "name": f'OBB {route_api["get"]["operationId"].replace("_", " ").title()}',
-        "description": route_api["get"]["description"],
-        "category": route_api["get"]["tags"][0].title(),
-        "widgetType": route_api["get"]["tags"][0],
-        "widgetId": f"OBB {widget_id}",
-        "params": query_schema,  # Use the fetched query schema
-        "endpoint": route.replace("/api", "api"),
-        "gridData": {"w": 20, "h": 5},
-        "data": {
-            "dataKey": "results",
-            "table": {
-                "showAll": True,
+        widget_config = {
+            "name": f'OBB {route_api["get"]["operationId"].replace("_", " ").title()}',
+            "description": route_api["get"]["description"],
+            "category": route_api["get"]["tags"][0].title(),
+            "widgetType": route_api["get"]["tags"][0],
+            "widgetId": f"OBB {widget_id}",
+            "params": query_schema,  # Use the fetched query schema
+            "endpoint": route.replace("/api", "api"),
+            "gridData": {"w": 20, "h": 5},
+            "data": {
+                "dataKey": "results",
+                "table": {
+                    "showAll": True,
+                },
             },
-        },
-    }
-
-    if columns_defs:
-        widget_config["data"]["table"]["columnsDefs"] = columns_defs
-        if "date" in columns_defs:
-            widget_config["data"]["table"]["index"] = "date"
-        if "period" in columns_defs:
-            widget_config["data"]["table"]["index"] = "period"
-
-    # Add the widget configuration to the widgets.json
-    widgets_json[widget_config["widgetId"]] = widget_config
-
-    if has_chart:
-        # deepcopy the widget_config
-        widget_config_chart = json.loads(json.dumps(widget_config))
-        del widget_config_chart["data"]["table"]
-
-        widget_config_chart["name"] = f"{widget_config_chart['name']} Chart"
-        widget_config_chart["widgetId"] = f"{widget_config_chart['widgetId']}_chart"
-        widget_config_chart["params"]["chart"] = True
-
-        widget_config_chart["defaultViz"] = "chart"
-        widget_config_chart["data"]["dataKey"] = "chart.content"
-        widget_config_chart["data"]["chart"] = {
-            "type": "line",
         }
 
-        widgets_json[widget_config_chart["widgetId"]] = widget_config_chart
+        if columns_defs:
+            widget_config["data"]["table"]["columnsDefs"] = columns_defs
+            if "date" in columns_defs:
+                widget_config["data"]["table"]["index"] = "date"
+            if "period" in columns_defs:
+                widget_config["data"]["table"]["index"] = "period"
 
-# Write the widgets_json to a file for debugging purposes
-with open("widgets.json", "w", encoding="utf-8") as f:
-    f.write(json.dumps(widgets_json, indent=4))
+        # Add the widget configuration to the widgets.json
+        widgets_json[widget_config["widgetId"]] = widget_config
+
+        if has_chart:
+            # deepcopy the widget_config
+            widget_config_chart = json.loads(json.dumps(widget_config))
+            del widget_config_chart["data"]["table"]
+
+            widget_config_chart["name"] = f"{widget_config_chart['name']} Chart"
+            widget_config_chart["widgetId"] = f"{widget_config_chart['widgetId']}_chart"
+            widget_config_chart["params"].append({"paramName": "chart", "value": True})
+
+            widget_config_chart["defaultViz"] = "chart"
+            widget_config_chart["data"]["dataKey"] = "chart.content"
+            widget_config_chart["data"]["chart"] = {
+                "type": "line",
+            }
+
+            widgets_json[widget_config_chart["widgetId"]] = widget_config_chart
+
+    # Write the widgets_json to a file for debugging purposes
+    with open(WIDGETS_JSON, "w") as f:
+        f.write(json.dumps(widgets_json, indent=4))
+
+
+create_widgets_json()
 
 
 @app.get("/")
@@ -110,20 +125,25 @@ async def get_root():
 @app.get("/widgets.json")
 async def get_widgets():
     """Widgets configuration file for the OpenBB Terminal Pro."""
-    return JSONResponse(content=widgets_json)
+    return JSONResponse(content=json.load(open(WIDGETS_JSON)))
 
 
 # pylint: disable=import-outside-toplevel
 def launch_api():
     """Main function."""
     import getpass
+
     import uvicorn
 
     if Path(CURRENT_USER_SETTINGS).exists():
         with open(CURRENT_USER_SETTINGS, "r") as f:
             current_settings = json.load(f)
     else:
-        current_settings = {"credentials": {}, "preferences": {}, "defaults": {"commands": {}}}
+        current_settings = {
+            "credentials": {},
+            "preferences": {},
+            "defaults": {"commands": {}},
+        }
 
     pat = getpass.getpass(
         "\n\nEnter your personal access token (PAT) to authorize the API and update your local settings."
@@ -149,17 +169,23 @@ def launch_api():
 
         if hub_credentials:
             # Prompt the user to ask if they want to persist the new settings
-            persist_input = input(
-                "\n\nDo you want to persist the new settings?"
-                + " Not recommended for public machines. (yes/no): "
-            ).strip().lower()
+            persist_input = (
+                input(
+                    "\n\nDo you want to persist the new settings?"
+                    + " Not recommended for public machines. (yes/no): "
+                )
+                .strip()
+                .lower()
+            )
 
             if persist_input in ["yes", "y"]:
                 PERSIST = True
             elif persist_input in ["no", "n"]:
                 PERSIST = False
             else:
-                print("\n\nInvalid input. Defaulting to not persisting the new settings.")
+                print(
+                    "\n\nInvalid input. Defaulting to not persisting the new settings."
+                )
                 PERSIST = False
 
             # Save the current settings to restore at the end of the session.
@@ -211,9 +237,7 @@ def launch_api():
     try:
         port = int(port)
     except ValueError:
-        print(
-            "\n\nOPENBB_API_PORT is set incorrectly. It should be an port number."
-        )
+        print("\n\nOPENBB_API_PORT is set incorrectly. It should be an port number.")
         port = input("Enter the port number: ")
         try:
             port = int(port)
@@ -237,6 +261,7 @@ def launch_api():
         if os.path.exists(USER_SETTINGS_COPY):
             print("\n\nRestoring the original settings.\n")
             os.replace(USER_SETTINGS_COPY, CURRENT_USER_SETTINGS)
+
 
 if __name__ == "__main__":
     try:
