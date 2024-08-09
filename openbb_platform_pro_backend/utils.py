@@ -108,10 +108,10 @@ def get_query_schema_for_widget(
                     ]
                     if None in enums:
                         param_def.options.append(ParamOption(label="None", value=""))
-                elif not param_def.type:  # Handle other types within anyOf
+                else:  # Handle other types within anyOf
                     if "string" in types:
                         param_def.value = ""
-                    elif "integer" in types:
+                    elif "integer" in types or "number" in types:
                         param_def.type = "number"
                         param_def.value = param["schema"].get("default", 0)
                     elif "null" in types:
@@ -120,7 +120,7 @@ def get_query_schema_for_widget(
             # Handling other types not within anyOf
             elif param["schema"].get("type") == "string":
                 param_def.value = param["schema"].get("default", "")
-            elif param["schema"].get("type") == "integer":
+            elif param["schema"].get("type") in ["integer", "number"]:
                 param_def.type = "number"
                 param_def.value = param["schema"].get("default", 0)
             elif param["schema"].get("type") == "boolean":
