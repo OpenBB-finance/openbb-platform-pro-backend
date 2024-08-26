@@ -260,8 +260,6 @@ def data_schema_to_columns_defs(openapi_json, result_schema_ref):
                 if prop.get("x-frontend_multiply") == 100
                 else "percent"
             )
-        elif cell_data_type == "date":
-            column_def["formatterFn"] = "date"
         elif cell_data_type == "number":
             column_def["formatterFn"] = "none"
 
