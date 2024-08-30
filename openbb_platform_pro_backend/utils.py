@@ -20,6 +20,7 @@ class ParamDef(BaseModel):
     label: str | None = None
     show: bool = True
     options: list[ParamOption] | None = Field(default_factory=list)
+    multiSelect: bool = False
 
 
 def get_query_schema_for_widget(
@@ -83,8 +84,12 @@ def get_query_schema_for_widget(
 
             # Enum within anyOf
             elif "anyOf" in param["schema"]:
-                enums, types = [], []
+                enums, types, choices = [], [], []
+                if "choices" in param["schema"]:
+                    choices.extend(param["schema"]["choices"])
+
                 for sub_schema in param["schema"]["anyOf"]:
+
                     if "enum" in sub_schema:
                         enums.extend(sub_schema["enum"])
                         continue
@@ -108,6 +113,17 @@ def get_query_schema_for_widget(
                     ]
                     if None in enums:
                         param_def.options.append(ParamOption(label="None", value=""))
+
+                if choices:  # If any choices were found, remove duplicates
+                    param_def.options = [
+                        ParamOption(label=str(v), value=v)
+                        for v in set(choices)
+                        if v is not None
+                    ]
+                    param_def.multiSelect = True
+                    if None in choices:
+                        param_def.options.append(ParamOption(label="None", value=None))
+
                 else:  # Handle other types within anyOf
                     if "string" in types:
                         param_def.value = ""
@@ -126,6 +142,12 @@ def get_query_schema_for_widget(
             elif param["schema"].get("type") == "boolean":
                 param_def.type = "boolean"
                 param_def.value = param["schema"].get("default", False)
+                param_def.options = [
+                    ParamOption(label="True", value=True),
+                    ParamOption(label="False", value=False),
+                ]
+                if param_def.value is None:
+                    param_def.options.insert(0, ParamOption(label="None", value=None))
 
         if param.get("description"):
             param_def.description = param.get("description")
